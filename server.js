@@ -23,7 +23,7 @@ app.use(bodyParser.json());
 
 // Routes
 app.use('/api/wallet', walletRoutes);
-app.use('/api/payment', apiKeyAuth, paymentRoutes);
+app.use('/api/payment', paymentRoutes);
 app.use('/api/balance', balanceRoutes);
 app.use('/api/cycles/txpin', txPinRoutes);
 app.use('/api/products', productRoutes);
