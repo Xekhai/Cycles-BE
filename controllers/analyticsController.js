@@ -61,14 +61,23 @@ const analyticsController = {
         }
       }
 
-      res.json({
+      const analyticsData = {
         bestProduct,
         worstProduct,
         totalSubscriptions,
         totalRevenue,
         totalActiveSubscriptions,
         totalInactiveSubscriptions,
+      };
+
+      // Save analytics data to Firestore
+      await db.collection('analytics').doc(userId).set({
+        user_id: userId,
+        analytics: analyticsData,
       });
+
+      res.json(analyticsData);
+      
     } catch (error) {
       console.error('Error fetching user analytics:', error);
       res.status(500).json({ message: 'Internal server error' });
