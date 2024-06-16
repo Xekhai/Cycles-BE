@@ -14,8 +14,8 @@ const subscriptionAuth = async (req, res, next) => {
     if (!subscriptionDoc.exists) {
       return res.status(404).json({ message: 'Subscription not found' });
     }
-
     const subscriptionData = subscriptionDoc.data();
+
     if (subscriptionData.user_id !== req.user.user_id) {
       return res.status(403).json({ message: 'Unauthorized access to this subscription' });
     }

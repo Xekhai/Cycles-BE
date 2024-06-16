@@ -179,6 +179,106 @@ const walletService = {
       withdrawalAmount: withdrawalAmount,
       feeAmount: feeAmount
     };
+  },
+  intraWalletTransfer: async (userId, subscriptionId, transactionPin) => {
+    // Validate subscription ID
+    const subscriptionRef = db.collection('subscription').doc(subscriptionId);
+    const subscriptionDoc = await subscriptionRef.get();
+    if (!subscriptionDoc.exists) {
+      throw new Error('Subscription does not exist');
+    }
+    const subscriptionData = subscriptionDoc.data();
+
+    // Validate user's wallet
+    const userWalletRef = db.collection('wallets').doc(userId);
+    const userWalletDoc = await userWalletRef.get();
+    if (!userWalletDoc.exists) {
+      throw new Error('User wallet does not exist');
+    }
+    const userWalletData = userWalletDoc.data();
+
+    // Validate transaction pin
+    const transactionPinRef = db.collection('transactionPin').where('user_id', '==', userId);
+    const transactionPinSnapshot = await transactionPinRef.get();
+    if (transactionPinSnapshot.empty || transactionPinSnapshot.docs[0].data().tx_pin !== transactionPin) {
+      throw new Error('Invalid transaction pin');
+    }
+
+    // Fetch the subscription creator's wallet
+    const productRef = subscriptionData.product;
+    const productDoc = await productRef.get();
+    if (!productDoc.exists) {
+      throw new Error('Product associated with the subscription does not exist');
+    }
+    const productData = productDoc.data();
+    const creatorWalletRef = db.collection('wallets').doc(productData.user);
+    const creatorWalletDoc = await creatorWalletRef.get();
+    if (!creatorWalletDoc.exists) {
+      throw new Error('Subscription creator wallet does not exist');
+    }
+    const creatorWalletData = creatorWalletDoc.data();
+
+    // Get user's wallet balances
+    const userAccountInfo = await algodClient.accountInformation(userWalletData.address).do();
+    const algoBalance = userAccountInfo.amount / 1e6 || 0;
+
+    // If Algo balance is low, top up the wallet
+    if (algoBalance <= 0.2) {
+      const fundingAmount = 0.25 - algoBalance;
+      const fundingTxn = algosdk.makePaymentTxnWithSuggestedParams(
+        centralAccount.addr,
+        userWalletData.address,
+        algosdk.algosToMicroalgos(fundingAmount),
+        undefined,
+        undefined,
+        await algodClient.getTransactionParams().do()
+      );
+      const signedFundingTxn = fundingTxn.signTxn(centralAccount.sk);
+      const sendFundingTx = await algodClient.sendRawTransaction(signedFundingTxn).do();
+      await algosdk.waitForConfirmation(algodClient, sendFundingTx.txId, 4);
+    }
+
+    // Fetch updated transaction parameters
+    const params = await algodClient.getTransactionParams().do();
+
+    // Transfer subscription amount from user's wallet to creator's wallet
+    const amount = subscriptionData.amount * 1e6; // Convert to microalgos
+    const transferTxn = algosdk.makeAssetTransferTxnWithSuggestedParams(
+      userWalletData.address,
+      creatorWalletData.address,
+      undefined,
+      undefined,
+      amount,
+      undefined,
+      usdcAssetId,
+      params
+    );
+
+    const signedTransferTxn = transferTxn.signTxn(algosdk.mnemonicToSecretKey(
+      CryptoJS.AES.decrypt(
+        CryptoJS.AES.decrypt(userWalletData.encryptedMnemonic, process.env.ENCRYPTION_KEY_TWO).toString(CryptoJS.enc.Utf8),
+        process.env.ENCRYPTION_KEY_ONE
+      ).toString(CryptoJS.enc.Utf8)
+    ).sk);
+
+    const sendTransferTx = await algodClient.sendRawTransaction(signedTransferTxn).do();
+    await algosdk.waitForConfirmation(algodClient, sendTransferTx.txId, 4);
+
+    // Create an ongoing cycle for the subscription
+    const ongoingCycleRef = db.collection('ongoing_cycle').doc();
+    await ongoingCycleRef.set({
+      user_id: userId,
+      date_initiated: new Date(),
+      subscription: subscriptionRef,
+      user_cycle_id: db.collection('users').doc(userId), // Reference to user document
+      amount_paid: subscriptionData.amount,
+      subscription_name: subscriptionData.name
+    });
+
+    return {
+      message: 'Transfer successful',
+      transactionId: sendTransferTx.txId
+    };
   }
 };
 
