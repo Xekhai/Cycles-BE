@@ -143,6 +143,8 @@ const paymentService = {
     await ongoingCycleRef.set({
       user_id: paymentData.user_id,
       date_initiated: new Date(),
+      user_name: paymentData.userName,
+      user_email: paymentData.email,
       subscription: subscriptionRef,
     });
 

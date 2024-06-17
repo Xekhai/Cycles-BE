@@ -266,13 +266,19 @@ const walletService = {
 
     // Create an ongoing cycle for the subscription
     const ongoingCycleRef = db.collection('ongoing_cycle').doc();
+    const userRef = db.collection('users').doc(userId);
+    const userDoc = await userRef.get();
+    const userData = userDoc.data();
+
     await ongoingCycleRef.set({
       user_id: userId,
       date_initiated: new Date(),
       subscription: subscriptionRef,
       user_cycle_id: db.collection('users').doc(userId), // Reference to user document
       amount_paid: subscriptionData.amount,
-      subscription_name: subscriptionData.name
+      subscription_name: subscriptionData.name,
+      user_name: userData.display_name,
+      email: userData.email
     });
 
     return {
