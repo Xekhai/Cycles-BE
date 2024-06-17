@@ -278,7 +278,7 @@ const walletService = {
       amount_paid: subscriptionData.amount,
       subscription_name: subscriptionData.name,
       user_name: userData.display_name,
-      email: userData.email
+      user_email: userData.email
     });
 
     return {
